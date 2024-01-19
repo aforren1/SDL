@@ -24,6 +24,8 @@
 
 #include "SDL_emscriptenvideo.h"
 
+#define EMSCRIPTEN_MS_TO_NS(TS) ((Uint64)((double)TS * SDL_NS_PER_MS))
+
 extern void Emscripten_RegisterEventHandlers(SDL_WindowData *data);
 extern void Emscripten_UnregisterEventHandlers(SDL_WindowData *data);
 extern EM_BOOL Emscripten_HandleCanvasResize(int eventType, const void *reserved, void *userData);

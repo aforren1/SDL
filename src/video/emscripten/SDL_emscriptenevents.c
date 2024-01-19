@@ -627,7 +627,7 @@ static EM_BOOL Emscripten_HandleMouseMove(int eventType, const EmscriptenMouseEv
         my = (float)(mouseEvent->targetY * yscale);
     }
 
-    SDL_SendMouseMotion(0, window_data->window, 0, isPointerLocked, mx, my);
+    SDL_SendMouseMotion(EMSCRIPTEN_MS_TO_NS(mouseEvent->timestamp), window_data->window, 0, isPointerLocked, mx, my);
     return 0;
 }
 
@@ -665,7 +665,7 @@ static EM_BOOL Emscripten_HandleMouseButton(int eventType, const EmscriptenMouse
         sdl_event_type = SDL_EVENT_MOUSE_BUTTON_UP;
         prevent_default = SDL_EventEnabled(sdl_event_type);
     }
-    SDL_SendMouseButton(0, window_data->window, 0, sdl_button_state, sdl_button);
+    SDL_SendMouseButton(EMSCRIPTEN_MS_TO_NS(mouseEvent->timestamp), window_data->window, 0, sdl_button_state, sdl_button);
 
     /* Do not consume the event if the mouse is outside of the canvas. */
     emscripten_get_element_css_size(window_data->canvas_id, &css_w, &css_h);
@@ -691,7 +691,7 @@ static EM_BOOL Emscripten_HandleMouseFocus(int eventType, const EmscriptenMouseE
 
         mx = (float)(mouseEvent->targetX * (window_data->window->w / client_w));
         my = (float)(mouseEvent->targetY * (window_data->window->h / client_h));
-        SDL_SendMouseMotion(0, window_data->window, 0, isPointerLocked, mx, my);
+        SDL_SendMouseMotion(EMSCRIPTEN_MS_TO_NS(mouseEvent->timestamp), window_data->window, 0, isPointerLocked, mx, my);
     }
 
     SDL_SetMouseFocus(eventType == EMSCRIPTEN_EVENT_MOUSEENTER ? window_data->window : NULL);
@@ -716,7 +716,7 @@ static EM_BOOL Emscripten_HandleWheel(int eventType, const EmscriptenWheelEvent 
         break;
     }
 
-    SDL_SendMouseWheel(0, window_data->window, 0, (float)wheelEvent->deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
+    SDL_SendMouseWheel(EMSCRIPTEN_MS_TO_NS(wheelEvent->timestamp), window_data->window, 0, (float)wheelEvent->deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
     return SDL_EventEnabled(SDL_EVENT_MOUSE_WHEEL);
 }
 
@@ -771,16 +771,16 @@ static EM_BOOL Emscripten_HandleTouch(int eventType, const EmscriptenTouchEvent 
         }
 
         if (eventType == EMSCRIPTEN_EVENT_TOUCHSTART) {
-            SDL_SendTouch(0, deviceId, id, window_data->window, SDL_TRUE, x, y, 1.0f);
+            SDL_SendTouch(EMSCRIPTEN_MS_TO_NS(touchEvent->timestamp), deviceId, id, window_data->window, SDL_TRUE, x, y, 1.0f);
 
             /* disable browser scrolling/pinch-to-zoom if app handles touch events */
             if (!preventDefault && SDL_EventEnabled(SDL_EVENT_FINGER_DOWN)) {
                 preventDefault = 1;
             }
         } else if (eventType == EMSCRIPTEN_EVENT_TOUCHMOVE) {
-            SDL_SendTouchMotion(0, deviceId, id, window_data->window, x, y, 1.0f);
+            SDL_SendTouchMotion(EMSCRIPTEN_MS_TO_NS(touchEvent->timestamp), deviceId, id, window_data->window, x, y, 1.0f);
         } else {
-            SDL_SendTouch(0, deviceId, id, window_data->window, SDL_FALSE, x, y, 1.0f);
+            SDL_SendTouch(EMSCRIPTEN_MS_TO_NS(touchEvent->timestamp), deviceId, id, window_data->window, SDL_FALSE, x, y, 1.0f);
 
             /* block browser's simulated mousedown/mouseup on touchscreen devices */
             preventDefault = 1;
@@ -807,7 +807,7 @@ static EM_BOOL Emscripten_HandleKey(int eventType, const EmscriptenKeyboardEvent
     }
 
     if (scancode != SDL_SCANCODE_UNKNOWN) {
-        SDL_SendKeyboardKeyAndKeycode(0, eventType == EMSCRIPTEN_EVENT_KEYDOWN ? SDL_PRESSED : SDL_RELEASED, scancode, keycode);
+        SDL_SendKeyboardKeyAndKeycode(EMSCRIPTEN_MS_TO_NS(keyEvent->timestamp), eventType == EMSCRIPTEN_EVENT_KEYDOWN ? SDL_PRESSED : SDL_RELEASED, scancode, keycode);
     }
 
     /* if TEXTINPUT events are enabled we can't prevent keydown or we won't get keypress
