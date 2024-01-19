@@ -716,7 +716,7 @@ static EM_BOOL Emscripten_HandleWheel(int eventType, const EmscriptenWheelEvent 
         break;
     }
 
-    SDL_SendMouseWheel(EMSCRIPTEN_MS_TO_NS(wheelEvent->timestamp), window_data->window, 0, (float)wheelEvent->deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
+    SDL_SendMouseWheel(0, window_data->window, 0, (float)wheelEvent->deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
     return SDL_EventEnabled(SDL_EVENT_MOUSE_WHEEL);
 }
 
