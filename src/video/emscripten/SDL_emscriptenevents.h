@@ -24,6 +24,8 @@
 
 #include "SDL_emscriptenvideo.h"
 
+// TODO: does it make more sense to go ms -> us (int) -> ns?
+#define EMSCRIPTEN_US_PER_MS    1000
 #define EMSCRIPTEN_MS_TO_NS(TS) ((Uint64)((double)TS * SDL_NS_PER_MS))
 
 extern void Emscripten_RegisterEventHandlers(SDL_WindowData *data);
