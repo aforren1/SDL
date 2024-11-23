@@ -259,6 +259,11 @@ static SDL_Scancode Emscripten_MapScanCode(const char *code)
     return SDL_SCANCODE_UNKNOWN;
 }
 
+static Uint64 emsc_ms_to_ns(double time)
+{
+    return (Uint64)SDL_round(time * SDL_NS_PER_MS);
+}
+
 static EM_BOOL Emscripten_HandlePointerLockChange(int eventType, const EmscriptenPointerlockChangeEvent *changeEvent, void *userData)
 {
     SDL_WindowData *window_data = (SDL_WindowData *)userData;
@@ -287,7 +292,7 @@ static EM_BOOL Emscripten_HandleMouseMove(int eventType, const EmscriptenMouseEv
         my = (float)(mouseEvent->targetY * yscale);
     }
 
-    SDL_SendMouseMotion(0, window_data->window, SDL_DEFAULT_MOUSE_ID, isPointerLocked, mx, my);
+    SDL_SendMouseMotion(emsc_ms_to_ns(mouseEvent->timestamp), window_data->window, SDL_DEFAULT_MOUSE_ID, isPointerLocked, mx, my);
     return 0;
 }
 
@@ -322,7 +327,7 @@ static EM_BOOL Emscripten_HandleMouseButton(int eventType, const EmscriptenMouse
         sdl_button_state = false;
         prevent_default = SDL_EventEnabled(SDL_EVENT_MOUSE_BUTTON_UP);
     }
-    SDL_SendMouseButton(0, window_data->window, SDL_DEFAULT_MOUSE_ID, sdl_button, sdl_button_state);
+    SDL_SendMouseButton(emsc_ms_to_ns(mouseEvent->timestamp), window_data->window, SDL_DEFAULT_MOUSE_ID, sdl_button, sdl_button_state);
 
     // Do not consume the event if the mouse is outside of the canvas.
     emscripten_get_element_css_size(window_data->canvas_id, &css_w, &css_h);
@@ -348,7 +353,7 @@ static EM_BOOL Emscripten_HandleMouseFocus(int eventType, const EmscriptenMouseE
 
         mx = (float)(mouseEvent->targetX * (window_data->window->w / client_w));
         my = (float)(mouseEvent->targetY * (window_data->window->h / client_h));
-        SDL_SendMouseMotion(0, window_data->window, SDL_GLOBAL_MOUSE_ID, isPointerLocked, mx, my);
+        SDL_SendMouseMotion(emsc_ms_to_ns(mouseEvent->timestamp), window_data->window, SDL_GLOBAL_MOUSE_ID, isPointerLocked, mx, my);
     }
 
     SDL_SetMouseFocus(eventType == EMSCRIPTEN_EVENT_MOUSEENTER ? window_data->window : NULL);
@@ -377,7 +382,7 @@ static EM_BOOL Emscripten_HandleWheel(int eventType, const EmscriptenWheelEvent 
         break;
     }
 
-    SDL_SendMouseWheel(0, window_data->window, SDL_DEFAULT_MOUSE_ID, deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
+    SDL_SendMouseWheel(emsc_ms_to_ns(wheelEvent->mouse.timestamp), window_data->window, SDL_DEFAULT_MOUSE_ID, deltaX, -deltaY, SDL_MOUSEWHEEL_NORMAL);
     return SDL_EventEnabled(SDL_EVENT_MOUSE_WHEEL);
 }
 
@@ -403,6 +408,7 @@ static EM_BOOL Emscripten_HandleTouch(int eventType, const EmscriptenTouchEvent 
     int i;
     double client_w, client_h;
     int preventDefault = 0;
+    const Uint64 timestamp = emsc_ms_to_ns(touchEvent->timestamp);
 
     const SDL_TouchID deviceId = 1;
     if (SDL_AddTouch(deviceId, SDL_TOUCH_DEVICE_DIRECT, "") < 0) {
@@ -432,16 +438,16 @@ static EM_BOOL Emscripten_HandleTouch(int eventType, const EmscriptenTouchEvent 
         }
 
         if (eventType == EMSCRIPTEN_EVENT_TOUCHSTART) {
-            SDL_SendTouch(0, deviceId, id, window_data->window, true, x, y, 1.0f);
+            SDL_SendTouch(timestamp, deviceId, id, window_data->window, true, x, y, 1.0f);
 
             // disable browser scrolling/pinch-to-zoom if app handles touch events
             if (!preventDefault && SDL_EventEnabled(SDL_EVENT_FINGER_DOWN)) {
                 preventDefault = 1;
             }
         } else if (eventType == EMSCRIPTEN_EVENT_TOUCHMOVE) {
-            SDL_SendTouchMotion(0, deviceId, id, window_data->window, x, y, 1.0f);
+            SDL_SendTouchMotion(timestamp, deviceId, id, window_data->window, x, y, 1.0f);
         } else {
-            SDL_SendTouch(0, deviceId, id, window_data->window, false, x, y, 1.0f);
+            SDL_SendTouch(timestamp, deviceId, id, window_data->window, false, x, y, 1.0f);
 
             // block browser's simulated mousedown/mouseup on touchscreen devices
             preventDefault = 1;
@@ -512,9 +518,9 @@ static EM_BOOL Emscripten_HandleKey(int eventType, const EmscriptenKeyboardEvent
     }
 
     if (keycode != SDLK_UNKNOWN) {
-        prevent_default = SDL_SendKeyboardKeyAndKeycode(0, SDL_DEFAULT_KEYBOARD_ID, 0, scancode, keycode, (eventType == EMSCRIPTEN_EVENT_KEYDOWN));
+        prevent_default = SDL_SendKeyboardKeyAndKeycode(emsc_ms_to_ns(keyEvent->timestamp), SDL_DEFAULT_KEYBOARD_ID, 0, scancode, keycode, (eventType == EMSCRIPTEN_EVENT_KEYDOWN));
     } else {
-        prevent_default = SDL_SendKeyboardKey(0, SDL_DEFAULT_KEYBOARD_ID, 0, scancode, (eventType == EMSCRIPTEN_EVENT_KEYDOWN));
+        prevent_default = SDL_SendKeyboardKey(emsc_ms_to_ns(keyEvent->timestamp), SDL_DEFAULT_KEYBOARD_ID, 0, scancode, (eventType == EMSCRIPTEN_EVENT_KEYDOWN));
     }
 
     /* if TEXTINPUT events are enabled we can't prevent keydown or we won't get keypress
@@ -645,6 +651,7 @@ static const char *Emscripten_HandleBeforeUnload(int eventType, const void *rese
 // IF YOU CHANGE THIS STRUCTURE, YOU NEED TO UPDATE THE JAVASCRIPT THAT FILLS IT IN: makePointerEventCStruct, below.
 typedef struct Emscripten_PointerEvent
 {
+    double timestamp;
     int pointerid;
     int button;
     int buttons;
@@ -668,6 +675,7 @@ static void Emscripten_UpdatePointerFromEvent(SDL_WindowData *window_data, const
         emscripten_get_element_css_size(window_data->canvas_id, &client_w, &client_h);
         const double xscale = window_data->window->w / client_w;
         const double yscale = window_data->window->h / client_h;
+        const Uint64 timestamp = emsc_ms_to_ns(event->timestamp);
 
         const bool isPointerLocked = window_data->has_pointer_lock;
         float mx, my;
@@ -679,27 +687,27 @@ static void Emscripten_UpdatePointerFromEvent(SDL_WindowData *window_data, const
             my = (float)(event->targetY * yscale);
         }
 
-        SDL_SendPenMotion(0, pen, window_data->window, mx, my);
+        SDL_SendPenMotion(timestamp, pen, window_data->window, mx, my);
 
         if (event->button == 0) {  // pen touch
             bool down = ((event->buttons & 1) != 0);
-            SDL_SendPenTouch(0, pen, window_data->window, false, down);
+            SDL_SendPenTouch(timestamp, pen, window_data->window, false, down);
         } else if (event->button == 5) {  // eraser touch...? Not sure if this is right...
             bool down = ((event->buttons & 32) != 0);
-            SDL_SendPenTouch(0, pen, window_data->window, true, down);
+            SDL_SendPenTouch(timestamp, pen, window_data->window, true, down);
         } else if (event->button == 1) {
             bool down = ((event->buttons & 4) != 0);
-            SDL_SendPenButton(0, pen, window_data->window, 2, down);
+            SDL_SendPenButton(timestamp, pen, window_data->window, 2, down);
         } else if (event->button == 2) {
             bool down = ((event->buttons & 2) != 0);
-            SDL_SendPenButton(0, pen, window_data->window, 1, down);
+            SDL_SendPenButton(timestamp, pen, window_data->window, 1, down);
         }
 
-        SDL_SendPenAxis(0, pen, window_data->window, SDL_PEN_AXIS_PRESSURE, event->pressure);
-        SDL_SendPenAxis(0, pen, window_data->window, SDL_PEN_AXIS_TANGENTIAL_PRESSURE, event->tangential_pressure);
-        SDL_SendPenAxis(0, pen, window_data->window, SDL_PEN_AXIS_XTILT, event->tiltx);
-        SDL_SendPenAxis(0, pen, window_data->window, SDL_PEN_AXIS_YTILT, event->tilty);
-        SDL_SendPenAxis(0, pen, window_data->window, SDL_PEN_AXIS_ROTATION, event->rotation);
+        SDL_SendPenAxis(timestamp, pen, window_data->window, SDL_PEN_AXIS_PRESSURE, event->pressure);
+        SDL_SendPenAxis(timestamp, pen, window_data->window, SDL_PEN_AXIS_TANGENTIAL_PRESSURE, event->tangential_pressure);
+        SDL_SendPenAxis(timestamp, pen, window_data->window, SDL_PEN_AXIS_XTILT, event->tiltx);
+        SDL_SendPenAxis(timestamp, pen, window_data->window, SDL_PEN_AXIS_YTILT, event->tilty);
+        SDL_SendPenAxis(timestamp, pen, window_data->window, SDL_PEN_AXIS_ROTATION, event->rotation);
     }
 }
 
@@ -748,6 +756,7 @@ static void Emscripten_set_pointer_event_callbacks(SDL_WindowData *data)
                     ptr = _SDL_malloc($2);
                     if (ptr != 0) {
                         var rect = target.getBoundingClientRect();
+                        makeSetValue('pointerEvent', Emscripten_PointerEvent.timestamp, 'event.timeStamp', 'double');
                         var idx = ptr >> 2;
                         HEAP32[idx++] = event.pointerId;
                         HEAP32[idx++] = (typeof(event.button) !== "undefined") ? event.button : -1;
